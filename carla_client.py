@@ -18,6 +18,7 @@ import random
 import sys
 import time
 
+import numpy as np
 import carla
 import pygame
 
@@ -114,6 +115,18 @@ def _adicionar_sensores(world, veiculo, frequencia):
     imu = world.spawn_actor(bp_imu, carla.Transform(), attach_to=veiculo)
     sensores['imu'] = {'ator': imu, 'dado': None}
     imu.listen(lambda d: sensores['imu'].update({'dado': d}))
+
+    bp_cam = lib.find('sensor.camera.rgb')
+    bp_cam.set_attribute('image_size_x', '640')
+    bp_cam.set_attribute('image_size_y', '660')
+    bp_cam.set_attribute('fov', '90')
+    bp_cam.set_attribute('sensor_tick', str(1.0 / min(frequencia, 30)))
+    cam = world.spawn_actor(bp_cam,
+                            carla.Transform(carla.Location(x=-6, z=3.5),
+                                            carla.Rotation(pitch=-12)),
+                            attach_to=veiculo)
+    sensores['camera'] = {'ator': cam, 'dado': None}
+    cam.listen(lambda img: sensores['camera'].update({'dado': img}))
 
     bp_lidar = lib.find('sensor.lidar.ray_cast')
     bp_lidar.set_attribute('channels',          '32')
@@ -315,6 +328,14 @@ def game_loop(args):
             # publica telemetria na rede SOME/IP via bridge TCP
             bridge_sender.enviar(dados)
             hud.bridge_ok = True
+
+            # atualiza feed da câmera no HUD
+            img = sensores['camera'].get('dado')
+            if img is not None:
+                arr = np.frombuffer(img.raw_data, dtype=np.uint8)
+                arr = arr.reshape((img.height, img.width, 4))[:, :, :3][:, :, ::-1]
+                surf = pygame.surfarray.make_surface(arr.swapaxes(0, 1))
+                hud.update_camera(surf)
 
             # espectador segue o ego
             t   = veiculo.get_transform()
