@@ -123,8 +123,11 @@ def _adicionar_sensores(world, veiculo, frequencia):
     bp_lidar.set_attribute('upper_fov',             '10')
     bp_lidar.set_attribute('lower_fov',             '-30')
     bp_lidar.set_attribute('rotation_frequency',    '10')
-    bp_lidar.set_attribute('dropoff_general_rate',  '0.0')
-    bp_lidar.set_attribute('sensor_tick',           str(1.0 / frequencia))
+    bp_lidar.set_attribute('dropoff_general_rate',    '0.45')
+    bp_lidar.set_attribute('dropoff_intensity_limit', '0.8')
+    bp_lidar.set_attribute('dropoff_zero_intensity',  '0.4')
+    bp_lidar.set_attribute('noise_stddev',            '0.02')
+    bp_lidar.set_attribute('sensor_tick',             str(1.0 / frequencia))
     lidar = world.spawn_actor(bp_lidar,
                               carla.Transform(carla.Location(x=0, z=2.5)),
                               attach_to=veiculo)
