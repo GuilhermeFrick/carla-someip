@@ -124,8 +124,15 @@ def _adicionar_sensores(world, veiculo, frequencia):
     lidar = world.spawn_actor(bp_lidar,
                               carla.Transform(carla.Location(x=0, z=2.5)),
                               attach_to=veiculo)
-    sensores['lidar'] = {'ator': lidar, 'dado': None}
-    lidar.listen(lambda d: sensores['lidar'].update({'dado': d}))
+    sensores['lidar'] = {'ator': lidar, 'dado': None, 'pts_xy': None}
+
+    def _on_lidar(data):
+        pts = np.frombuffer(data.raw_data, dtype=np.float32).copy().reshape((-1, 4))
+        step = max(1, len(pts) // 2000)
+        sensores['lidar']['dado']   = data
+        sensores['lidar']['pts_xy'] = pts[::step, :2].tolist()
+
+    lidar.listen(_on_lidar)
 
     return sensores
 
@@ -224,10 +231,7 @@ def _ler_telemetria(veiculo, sensores, world):
     lidar = sensores['lidar'].get('dado')
     if lidar:
         dados['lidar_pontos'] = len(lidar)
-        # extrai x,y para visualização top-down (CPU data, seguro fora do callback)
-        pts = np.frombuffer(lidar.raw_data, dtype=np.float32).reshape((-1, 4))
-        step = max(1, len(pts) // 2000)   # limita a ~2000 pts para pygame
-        dados['lidar_pts_xy'] = pts[::step, :2].tolist()
+        dados['lidar_pts_xy'] = sensores['lidar'].get('pts_xy')
 
     dados.update(_adas_ground_truth(world, veiculo))
     return dados
