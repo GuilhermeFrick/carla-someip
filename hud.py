@@ -10,6 +10,7 @@ Controles:
 
 import pygame
 import math
+import colorsys
 
 PRETO     = (10,  10,  10)
 BRANCO    = (240, 240, 240)
@@ -264,49 +265,53 @@ class HUD:
 
     # ── LiDAR top-down ───────────────────────────────────────────────────────
 
+    @staticmethod
+    def _z_to_rgb(z, z_min=-2.5, z_max=2.0):
+        """Converte altura z para cor HSV rainbow (azul=chão, vermelho=alto) estilo Velodyne."""
+        t   = max(0.0, min(1.0, (z - z_min) / (z_max - z_min)))
+        hue = (1.0 - t) * 0.66   # 0.66=azul → 0.0=vermelho
+        r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+        return (int(r * 255), int(g * 255), int(b * 255))
+
     def _painel_lidar(self, dados):
-        pts   = dados.get('lidar_pts_xy')
+        pts   = dados.get('lidar_pts_xyz')
         n_pts = dados.get('lidar_pontos', 0)
         x0    = LARGURA_HUD
         cx    = x0 + LARGURA_CAM // 2
         cy    = ALTURA // 2
-        ESC   = 5.0    # px por metro  (50m = 250 px)
-        RMAX  = 50.0
+        ESC   = 4.0    # px por metro  (120m → 480 px diâmetro)
+        RMAX  = 120.0
 
         pygame.draw.rect(self.tela, (8, 8, 18), (x0, 0, LARGURA_CAM, ALTURA))
 
         # círculos de referência
-        for r_m in [10, 20, 30, 40, 50]:
+        for r_m in [20, 40, 60, 80, 100, 120]:
             r_px = int(r_m * ESC)
+            if r_px > 300:
+                continue
             pygame.draw.circle(self.tela, CINZA, (cx, cy), r_px, 1)
             lbl = self.fonte_label.render(f'{r_m}m', True, CINZA)
             self.tela.blit(lbl, (cx + r_px + 2, cy - 8))
 
         # eixos
-        pygame.draw.line(self.tela, CINZA, (cx, cy - 270), (cx, cy + 270), 1)
+        pygame.draw.line(self.tela, CINZA, (cx, cy - 300), (cx, cy + 300), 1)
         pygame.draw.line(self.tela, CINZA, (x0 + 10, cy), (x0 + LARGURA_CAM - 10, cy), 1)
 
         # seta de frente
         pygame.draw.polygon(self.tela, CINZA_MED,
-                            [(cx, cy - 270), (cx - 6, cy - 256), (cx + 6, cy - 256)])
+                            [(cx, cy - 295), (cx - 6, cy - 281), (cx + 6, cy - 281)])
         frnt = self.fonte_label.render('FRENTE', True, CINZA_MED)
-        self.tela.blit(frnt, (cx - frnt.get_width() // 2, cy - 290))
+        self.tela.blit(frnt, (cx - frnt.get_width() // 2, cy - 312))
 
-        # pontos LiDAR
+        # pontos LiDAR — cor por altura z (estilo laser_id Velodyne)
         if pts is not None and len(pts) > 0:
-            for x, y in pts:
+            for x, y, z in pts:
                 dist = (x*x + y*y) ** 0.5
-                if dist > RMAX or dist < 0.5:
+                if dist > RMAX or dist < 0.3:
                     continue
-                t = dist / RMAX
-                if t < 0.25:
-                    cor = VERMELHO
-                elif t < 0.55:
-                    cor = AMARELO
-                else:
-                    cor = VERDE
-                px = int(cx + y * ESC)
-                py = int(cy - x * ESC)
+                cor = self._z_to_rgb(z)
+                px  = int(cx + y * ESC)
+                py  = int(cy - x * ESC)
                 if x0 + 4 < px < x0 + LARGURA_CAM - 4 and 4 < py < ALTURA - 4:
                     pygame.draw.circle(self.tela, cor, (px, py), 1)
 
@@ -316,10 +321,10 @@ class HUD:
         # separador vertical
         pygame.draw.line(self.tela, CINZA_MED, (x0, 0), (x0, ALTURA), 2)
 
-        # label
-        lbl = self.fonte_label.render(f'LiDAR  TOP-DOWN  {n_pts} pts', True, CINZA_MED)
+        # label + legenda de cores
+        lbl = self.fonte_label.render(f'LiDAR  HDL-32E  TOP-DOWN  {n_pts} pts', True, CINZA_MED)
         self.tela.blit(lbl, (x0 + 8, 8))
-        leg = self.fonte_label.render('verde=longe  amarelo=medio  vermelho=perto', True, CINZA)
+        leg = self.fonte_label.render('azul=chao   ciano=medio   vermelho=alto', True, CINZA)
         self.tela.blit(leg, (x0 + 8, ALTURA - 18))
 
     # ── Render principal ──────────────────────────────────────────────────────

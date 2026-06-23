@@ -117,20 +117,24 @@ def _adicionar_sensores(world, veiculo, frequencia):
     imu.listen(lambda d: sensores['imu'].update({'dado': d}))
 
     bp_lidar = lib.find('sensor.lidar.ray_cast')
-    bp_lidar.set_attribute('channels',          '32')
-    bp_lidar.set_attribute('points_per_second', '56000')
-    bp_lidar.set_attribute('range',             '50')
-    bp_lidar.set_attribute('sensor_tick',       str(1.0 / frequencia))
+    bp_lidar.set_attribute('channels',              '32')
+    bp_lidar.set_attribute('points_per_second',     '700000')   # Velodyne HDL-32E
+    bp_lidar.set_attribute('range',                 '120')
+    bp_lidar.set_attribute('upper_fov',             '10')
+    bp_lidar.set_attribute('lower_fov',             '-30')
+    bp_lidar.set_attribute('rotation_frequency',    '10')
+    bp_lidar.set_attribute('dropoff_general_rate',  '0.0')
+    bp_lidar.set_attribute('sensor_tick',           str(1.0 / frequencia))
     lidar = world.spawn_actor(bp_lidar,
                               carla.Transform(carla.Location(x=0, z=2.5)),
                               attach_to=veiculo)
     sensores['lidar'] = {'ator': lidar, 'dado': None, 'pts_xy': None}
 
     def _on_lidar(data):
-        pts = np.frombuffer(data.raw_data, dtype=np.float32).copy().reshape((-1, 4))
-        step = max(1, len(pts) // 2000)
-        sensores['lidar']['dado']   = data
-        sensores['lidar']['pts_xy'] = pts[::step, :2].tolist()
+        pts  = np.frombuffer(data.raw_data, dtype=np.float32).copy().reshape((-1, 4))
+        step = max(1, len(pts) // 3000)
+        sensores['lidar']['dado']    = data
+        sensores['lidar']['pts_xyz'] = pts[::step, :3].tolist()  # x, y, z
 
     lidar.listen(_on_lidar)
 
@@ -286,7 +290,7 @@ def _ler_telemetria(veiculo, sensores, world):
     lidar = sensores['lidar'].get('dado')
     if lidar:
         dados['lidar_pontos'] = len(lidar)
-        dados['lidar_pts_xy'] = sensores['lidar'].get('pts_xy')
+        dados['lidar_pts_xyz'] = sensores['lidar'].get('pts_xyz')
 
     dados.update(_adas_ground_truth(world, veiculo))
     return dados
