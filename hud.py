@@ -22,10 +22,8 @@ AZUL      = (50,  150, 255)
 LARANJA   = (255, 140, 0)
 ROXO      = (160, 80,  220)
 
-LARGURA_HUD = 640   # painel de telemetria (esquerda)
-LARGURA_CAM = 640   # feed da câmera CARLA (direita)
-LARGURA     = LARGURA_HUD + LARGURA_CAM
-ALTURA      = 660
+LARGURA = 640
+ALTURA  = 660
 
 ACAO_NENHUMA   = 'nenhuma'
 ACAO_PAUSAR    = 'pausar'
@@ -52,7 +50,7 @@ class HUD:
     def __init__(self):
         pygame.init()
         self.tela          = pygame.display.set_mode((LARGURA, ALTURA))
-        pygame.display.set_caption('CARLA SOME/IP — Telemetria + Câmera')
+        pygame.display.set_caption('Telemetria CARLA — SOME/IP')
         self.clock         = pygame.time.Clock()
         self.fonte_grande  = pygame.font.SysFont('Consolas', 58, bold=True)
         self.fonte_media   = pygame.font.SysFont('Consolas', 20, bold=True)
@@ -60,7 +58,6 @@ class HUD:
         self.fonte_label   = pygame.font.SysFont('Consolas', 13)
         self.pausado       = False
         self.bridge_ok     = False   # atualizado pelo carla_client
-        self._cam_surface  = None    # pygame.Surface com o frame atual da câmera
 
     # ── Eventos ──────────────────────────────────────────────────────────────
 
@@ -263,26 +260,6 @@ class HUD:
         self.tela.blit(txt, (LARGURA // 2 - txt.get_width() // 2, ALTURA // 2 - 18))
         self.tela.blit(sub, (LARGURA // 2 - sub.get_width() // 2, ALTURA // 2 + 14))
 
-    # ── Câmera ────────────────────────────────────────────────────────────────
-
-    def update_camera(self, surface: pygame.Surface):
-        """Recebe um pygame.Surface com o frame atual da câmera RGB."""
-        self._cam_surface = surface
-
-    def _painel_camera(self):
-        x0 = LARGURA_HUD
-        if self._cam_surface is not None:
-            cam = pygame.transform.scale(self._cam_surface, (LARGURA_CAM, ALTURA))
-            self.tela.blit(cam, (x0, 0))
-        else:
-            pygame.draw.rect(self.tela, (15, 15, 25), (x0, 0, LARGURA_CAM, ALTURA))
-            aguard = self.fonte_media.render('Aguardando camera...', True, CINZA_MED)
-            self.tela.blit(aguard, (x0 + LARGURA_CAM // 2 - aguard.get_width() // 2,
-                                    ALTURA // 2 - 10))
-        pygame.draw.line(self.tela, CINZA, (x0, 0), (x0, ALTURA), 2)
-        lbl = self.fonte_label.render('RGB CAMERA  -- ego vehicle', True, CINZA_MED)
-        self.tela.blit(lbl, (x0 + 8, 8))
-
     # ── Render principal ──────────────────────────────────────────────────────
 
     def renderizar(self, dados, tick, duracao, frequencia, velocidade_sim=1):
@@ -375,7 +352,6 @@ class HUD:
         if self.pausado:
             self._overlay_pause()
 
-        self._painel_camera()
         pygame.display.flip()
         self.clock.tick(frequencia)
 

@@ -18,7 +18,6 @@ import random
 import sys
 import time
 
-import numpy as np
 import carla
 import pygame
 
@@ -115,25 +114,6 @@ def _adicionar_sensores(world, veiculo, frequencia):
     imu = world.spawn_actor(bp_imu, carla.Transform(), attach_to=veiculo)
     sensores['imu'] = {'ator': imu, 'dado': None}
     imu.listen(lambda d: sensores['imu'].update({'dado': d}))
-
-    bp_cam = lib.find('sensor.camera.rgb')
-    bp_cam.set_attribute('image_size_x', '400')
-    bp_cam.set_attribute('image_size_y', '300')
-    bp_cam.set_attribute('fov', '90')
-    bp_cam.set_attribute('sensor_tick', '0.1')   # 10 Hz — alivia GPU
-    cam = world.spawn_actor(bp_cam,
-                            carla.Transform(carla.Location(x=-6, z=3.5),
-                                            carla.Rotation(pitch=-12)),
-                            attach_to=veiculo)
-    sensores['camera'] = {'ator': cam, 'dado': None}
-
-    def _on_camera(img):
-        # converte imediatamente — img.raw_data é memória GPU liberada após o callback
-        arr = np.frombuffer(img.raw_data, dtype=np.uint8).copy()
-        arr = arr.reshape((img.height, img.width, 4))[:, :, :3][:, :, ::-1]
-        sensores['camera']['dado'] = arr
-
-    cam.listen(_on_camera)
 
     bp_lidar = lib.find('sensor.lidar.ray_cast')
     bp_lidar.set_attribute('channels',          '32')
@@ -336,11 +316,6 @@ def game_loop(args):
             bridge_sender.enviar(dados)
             hud.bridge_ok = True
 
-            # atualiza feed da câmera no HUD (arr já convertido no callback)
-            arr = sensores['camera'].get('dado')
-            if arr is not None:
-                surf = pygame.surfarray.make_surface(arr.swapaxes(0, 1))
-                hud.update_camera(surf)
 
             # espectador segue o ego
             t   = veiculo.get_transform()
