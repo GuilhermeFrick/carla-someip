@@ -186,6 +186,63 @@ def _adas_ground_truth(world, veiculo):
     }
 
 
+def _desenhar_debug_boxes(world, veiculo, fps):
+    """Desenha bounding boxes 3D na janela UE4 (sem sensor, sem risco de crash)."""
+    ego_t   = veiculo.get_transform()
+    ego_loc = ego_t.location
+    lt      = 1.5 / fps   # life_time ligeiramente acima de 1 tick para evitar flickering
+
+    # ego — azul
+    bb = veiculo.bounding_box
+    world.debug.draw_box(
+        carla.BoundingBox(ego_t.transform(bb.location), bb.extent),
+        ego_t.rotation, thickness=0.08,
+        color=carla.Color(0, 120, 255), life_time=lt,
+    )
+
+    # veículos NPC — verde
+    for a in world.get_actors().filter('vehicle.*'):
+        if a.id == veiculo.id:
+            continue
+        loc  = a.get_location()
+        dist = math.sqrt((loc.x - ego_loc.x)**2 + (loc.y - ego_loc.y)**2)
+        if dist > RAIO_ADAS:
+            continue
+        t  = a.get_transform()
+        bb = a.bounding_box
+        wl = t.transform(bb.location)
+        world.debug.draw_box(
+            carla.BoundingBox(wl, bb.extent),
+            t.rotation, thickness=0.07,
+            color=carla.Color(0, 255, 0), life_time=lt,
+        )
+        label = f"{a.type_id.split('.')[-1]}  {dist:.1f}m"
+        world.debug.draw_string(
+            carla.Location(wl.x, wl.y, wl.z + bb.extent.z + 0.4),
+            label, color=carla.Color(0, 255, 0), life_time=lt,
+        )
+
+    # pedestres — amarelo
+    for a in world.get_actors().filter('walker.*'):
+        loc  = a.get_location()
+        dist = math.sqrt((loc.x - ego_loc.x)**2 + (loc.y - ego_loc.y)**2)
+        if dist > RAIO_ADAS:
+            continue
+        t  = a.get_transform()
+        bb = a.bounding_box
+        wl = t.transform(bb.location)
+        world.debug.draw_box(
+            carla.BoundingBox(wl, bb.extent),
+            t.rotation, thickness=0.07,
+            color=carla.Color(255, 200, 0), life_time=lt,
+        )
+        world.debug.draw_string(
+            carla.Location(wl.x, wl.y, wl.z + bb.extent.z + 0.4),
+            f'pedestrian  {dist:.1f}m',
+            color=carla.Color(255, 200, 0), life_time=lt,
+        )
+
+
 def _ler_telemetria(veiculo, sensores, world):
     ctrl  = veiculo.get_control()
     vel   = veiculo.get_velocity()
@@ -318,6 +375,7 @@ def game_loop(args):
                 if tick >= total:
                     break
                 world.tick()
+                _desenhar_debug_boxes(world, veiculo, args.fps)
                 dados = _ler_telemetria(veiculo, sensores, world)
                 tick += 1
 
