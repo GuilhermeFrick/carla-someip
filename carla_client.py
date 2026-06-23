@@ -18,6 +18,7 @@ import random
 import sys
 import time
 
+import numpy as np
 import carla
 import pygame
 
@@ -223,6 +224,10 @@ def _ler_telemetria(veiculo, sensores, world):
     lidar = sensores['lidar'].get('dado')
     if lidar:
         dados['lidar_pontos'] = len(lidar)
+        # extrai x,y para visualização top-down (CPU data, seguro fora do callback)
+        pts = np.frombuffer(lidar.raw_data, dtype=np.float32).reshape((-1, 4))
+        step = max(1, len(pts) // 2000)   # limita a ~2000 pts para pygame
+        dados['lidar_pts_xy'] = pts[::step, :2].tolist()
 
     dados.update(_adas_ground_truth(world, veiculo))
     return dados

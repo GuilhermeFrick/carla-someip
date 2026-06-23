@@ -22,8 +22,10 @@ AZUL      = (50,  150, 255)
 LARANJA   = (255, 140, 0)
 ROXO      = (160, 80,  220)
 
-LARGURA = 640
-ALTURA  = 660
+LARGURA_HUD = 640
+LARGURA_CAM = 640
+LARGURA     = LARGURA_HUD + LARGURA_CAM
+ALTURA      = 660
 
 ACAO_NENHUMA   = 'nenhuma'
 ACAO_PAUSAR    = 'pausar'
@@ -50,7 +52,7 @@ class HUD:
     def __init__(self):
         pygame.init()
         self.tela          = pygame.display.set_mode((LARGURA, ALTURA))
-        pygame.display.set_caption('Telemetria CARLA — SOME/IP')
+        pygame.display.set_caption('CARLA SOME/IP — Telemetria + LiDAR')
         self.clock         = pygame.time.Clock()
         self.fonte_grande  = pygame.font.SysFont('Consolas', 58, bold=True)
         self.fonte_media   = pygame.font.SysFont('Consolas', 20, bold=True)
@@ -260,6 +262,66 @@ class HUD:
         self.tela.blit(txt, (LARGURA // 2 - txt.get_width() // 2, ALTURA // 2 - 18))
         self.tela.blit(sub, (LARGURA // 2 - sub.get_width() // 2, ALTURA // 2 + 14))
 
+    # ── LiDAR top-down ───────────────────────────────────────────────────────
+
+    def _painel_lidar(self, dados):
+        pts   = dados.get('lidar_pts_xy')
+        n_pts = dados.get('lidar_pontos', 0)
+        x0    = LARGURA_HUD
+        cx    = x0 + LARGURA_CAM // 2
+        cy    = ALTURA // 2
+        ESC   = 5.0    # px por metro  (50m = 250 px)
+        RMAX  = 50.0
+
+        pygame.draw.rect(self.tela, (8, 8, 18), (x0, 0, LARGURA_CAM, ALTURA))
+
+        # círculos de referência
+        for r_m in [10, 20, 30, 40, 50]:
+            r_px = int(r_m * ESC)
+            pygame.draw.circle(self.tela, CINZA, (cx, cy), r_px, 1)
+            lbl = self.fonte_label.render(f'{r_m}m', True, CINZA)
+            self.tela.blit(lbl, (cx + r_px + 2, cy - 8))
+
+        # eixos
+        pygame.draw.line(self.tela, CINZA, (cx, cy - 270), (cx, cy + 270), 1)
+        pygame.draw.line(self.tela, CINZA, (x0 + 10, cy), (x0 + LARGURA_CAM - 10, cy), 1)
+
+        # seta de frente
+        pygame.draw.polygon(self.tela, CINZA_MED,
+                            [(cx, cy - 270), (cx - 6, cy - 256), (cx + 6, cy - 256)])
+        frnt = self.fonte_label.render('FRENTE', True, CINZA_MED)
+        self.tela.blit(frnt, (cx - frnt.get_width() // 2, cy - 290))
+
+        # pontos LiDAR
+        if pts is not None and len(pts) > 0:
+            for x, y in pts:
+                dist = (x*x + y*y) ** 0.5
+                if dist > RMAX or dist < 0.5:
+                    continue
+                t = dist / RMAX
+                if t < 0.25:
+                    cor = VERMELHO
+                elif t < 0.55:
+                    cor = AMARELO
+                else:
+                    cor = VERDE
+                px = int(cx + y * ESC)
+                py = int(cy - x * ESC)
+                if x0 + 4 < px < x0 + LARGURA_CAM - 4 and 4 < py < ALTURA - 4:
+                    pygame.draw.circle(self.tela, cor, (px, py), 1)
+
+        # ego vehicle
+        pygame.draw.rect(self.tela, AZUL, (cx - 6, cy - 10, 12, 20), border_radius=3)
+
+        # separador vertical
+        pygame.draw.line(self.tela, CINZA_MED, (x0, 0), (x0, ALTURA), 2)
+
+        # label
+        lbl = self.fonte_label.render(f'LiDAR  TOP-DOWN  {n_pts} pts', True, CINZA_MED)
+        self.tela.blit(lbl, (x0 + 8, 8))
+        leg = self.fonte_label.render('verde=longe  amarelo=medio  vermelho=perto', True, CINZA)
+        self.tela.blit(leg, (x0 + 8, ALTURA - 18))
+
     # ── Render principal ──────────────────────────────────────────────────────
 
     def renderizar(self, dados, tick, duracao, frequencia, velocidade_sim=1):
@@ -352,6 +414,7 @@ class HUD:
         if self.pausado:
             self._overlay_pause()
 
+        self._painel_lidar(dados)
         pygame.display.flip()
         self.clock.tick(frequencia)
 
