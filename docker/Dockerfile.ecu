@@ -1,0 +1,12 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements-docker.txt .
+RUN pip install --no-cache-dir -r requirements-docker.txt
+
+COPY someip_network/ ./someip_network/
+COPY attacks/        ./attacks/
+COPY config/         ./config/
+
+CMD ["python", "-m", "someip_network.bridge"]

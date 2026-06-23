@@ -1,0 +1,51 @@
+version: '3.9'
+
+networks:
+  someip-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+services:
+
+  # Recebe telemetria do CARLA (Windows) via TCP e publica SOME/IP UDP
+  ecu_bridge:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ecu
+    container_name: ecu_bridge
+    command: python -m someip_network.bridge
+    ports:
+      - "5000:5000"        # TCP bridge — CARLA conecta aqui
+    networks:
+      someip-net:
+        ipv4_address: 172.20.0.10
+    restart: on-failure
+
+  # Monitor IDS — captura PCAP e roda deteccao
+  ids_monitor:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ids
+    container_name: ids_monitor
+    volumes:
+      - ../traffic_logs:/app/traffic_logs
+    networks:
+      someip-net:
+        ipv4_address: 172.20.0.20
+    depends_on:
+      - ecu_bridge
+    restart: on-failure
+
+  # Atacante — ativado manualmente para gerar trafego de ataque
+  attacker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ecu
+    container_name: attacker
+    profiles: ["attack"]      # so sobe com: docker compose --profile attack up
+    networks:
+      someip-net:
+        ipv4_address: 172.20.0.30
+    restart: "no"

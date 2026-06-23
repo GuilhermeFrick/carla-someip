@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+traffic_logs/*.jsonl
+traffic_logs/*.pcap
+traffic_logs/*.csv
+data/*.pcap
+*.pkl
+*.npz
+*.log
+.DS_Store
