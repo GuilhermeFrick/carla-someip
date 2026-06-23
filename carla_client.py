@@ -188,15 +188,15 @@ def _adas_ground_truth(world, veiculo):
 
 def _desenhar_debug_boxes(world, veiculo, fps):
     """Desenha bounding boxes 3D na janela UE4 (sem sensor, sem risco de crash)."""
-    ego_t   = veiculo.get_transform()
-    ego_loc = ego_t.location
-    lt      = 1.5 / fps   # life_time ligeiramente acima de 1 tick para evitar flickering
+    ego_loc = veiculo.get_location()
+    lt      = max(0.12, 2.0 / fps)
 
     # ego — azul
+    t  = veiculo.get_transform()
     bb = veiculo.bounding_box
     world.debug.draw_box(
-        carla.BoundingBox(ego_t.transform(bb.location), bb.extent),
-        ego_t.rotation, thickness=0.08,
+        carla.BoundingBox(t.location, bb.extent),
+        t.rotation, thickness=0.08,
         color=carla.Color(0, 120, 255), life_time=lt,
     )
 
@@ -210,16 +210,15 @@ def _desenhar_debug_boxes(world, veiculo, fps):
             continue
         t  = a.get_transform()
         bb = a.bounding_box
-        wl = t.transform(bb.location)
         world.debug.draw_box(
-            carla.BoundingBox(wl, bb.extent),
+            carla.BoundingBox(t.location, bb.extent),
             t.rotation, thickness=0.07,
             color=carla.Color(0, 255, 0), life_time=lt,
         )
-        label = f"{a.type_id.split('.')[-1]}  {dist:.1f}m"
         world.debug.draw_string(
-            carla.Location(wl.x, wl.y, wl.z + bb.extent.z + 0.4),
-            label, color=carla.Color(0, 255, 0), life_time=lt,
+            carla.Location(loc.x, loc.y, loc.z + bb.extent.z + 0.5),
+            f"{a.type_id.split('.')[-1]}  {dist:.1f}m",
+            color=carla.Color(0, 255, 0), life_time=lt,
         )
 
     # pedestres — amarelo
@@ -230,14 +229,13 @@ def _desenhar_debug_boxes(world, veiculo, fps):
             continue
         t  = a.get_transform()
         bb = a.bounding_box
-        wl = t.transform(bb.location)
         world.debug.draw_box(
-            carla.BoundingBox(wl, bb.extent),
+            carla.BoundingBox(t.location, bb.extent),
             t.rotation, thickness=0.07,
             color=carla.Color(255, 200, 0), life_time=lt,
         )
         world.debug.draw_string(
-            carla.Location(wl.x, wl.y, wl.z + bb.extent.z + 0.4),
+            carla.Location(loc.x, loc.y, loc.z + bb.extent.z + 0.5),
             f'pedestrian  {dist:.1f}m',
             color=carla.Color(255, 200, 0), life_time=lt,
         )
@@ -375,9 +373,10 @@ def game_loop(args):
                 if tick >= total:
                     break
                 world.tick()
-                _desenhar_debug_boxes(world, veiculo, args.fps)
                 dados = _ler_telemetria(veiculo, sensores, world)
                 tick += 1
+
+            _desenhar_debug_boxes(world, veiculo, args.fps)
 
             # publica telemetria na rede SOME/IP via bridge TCP
             bridge_sender.enviar(dados)
