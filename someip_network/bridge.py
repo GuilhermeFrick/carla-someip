@@ -2,28 +2,14 @@
 Bridge TCP (Windows CARLA) → SOME/IP UDP (Docker/WSL2).
 
 Windows roda o CARLA e envia telemetria via TCP.
-Este modulo roda no container Linux, recebe e republica como SOME/IP.
+Este módulo roda no container Linux, recebe e republica como SOME/IP.
 """
 
 import json
 import socket
-import threading
 
 from someip_network.network import SomeIPNetwork
 from someip_network import BRIDGE_PORT
-
-TICK_COUNTERS = {}
-FREQ = {
-    'dynamics': 1,   # todo tick (50Hz se FREQUENCIA=50)
-    'gnss':     10,  # a cada 10 ticks (5Hz se FREQUENCIA=50)
-    'imu':      1,   # todo tick
-    'lidar':    5,   # a cada 5 ticks (10Hz)
-    'adas':     2,   # a cada 2 ticks (25Hz)
-}
-
-
-def _should_send(service: str, tick: int) -> bool:
-    return tick % FREQ[service] == 0
 
 
 def serve(host='0.0.0.0', port=BRIDGE_PORT):
@@ -41,8 +27,7 @@ def serve(host='0.0.0.0', port=BRIDGE_PORT):
 
 
 def _handle(conn: socket.socket, net: SomeIPNetwork):
-    buf  = b''
-    tick = 0
+    buf = b''
     try:
         while True:
             chunk = conn.recv(4096)
@@ -53,21 +38,11 @@ def _handle(conn: socket.socket, net: SomeIPNetwork):
                 line, buf = buf.split(b'\n', 1)
                 try:
                     data = json.loads(line.decode())
-                    tick += 1
-                    if _should_send('dynamics', tick):
-                        net.send_dynamics(data)
-                    if _should_send('gnss', tick) and data.get('latitude'):
-                        net.send_gnss(data)
-                    if _should_send('imu', tick) and data.get('acel_x') is not None:
-                        net.send_imu(data)
-                    if _should_send('lidar', tick) and data.get('lidar_pontos'):
-                        net.send_lidar(data)
-                    if _should_send('adas', tick):
-                        net.send_adas(data)
+                    net.publish_tick(data)
                 except json.JSONDecodeError:
                     pass
     except Exception as e:
-        print(f'[BRIDGE] Conexao encerrada: {e}')
+        print(f'[BRIDGE] Conexão encerrada: {e}')
     finally:
         conn.close()
         print('[BRIDGE] CARLA desconectado.')

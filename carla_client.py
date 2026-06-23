@@ -135,6 +135,7 @@ def _adas_ground_truth(world, veiculo):
     fwd     = ego_t.get_forward_vector()
 
     veiculos, pedestres, semaforos = [], [], []
+    lidar_objects = []
 
     for a in world.get_actors().filter('vehicle.*'):
         if a.id == veiculo.id:
@@ -144,6 +145,8 @@ def _adas_ground_truth(world, veiculo):
         dist = math.sqrt(dx**2 + dy**2)
         if dist < RAIO_ADAS and dx * fwd.x + dy * fwd.y > 0:
             veiculos.append(round(dist, 1))
+            azimuth = round(math.degrees(math.atan2(dy, dx)), 1)
+            lidar_objects.append({'class': 'vehicle', 'distance_m': round(dist, 1), 'azimuth_deg': azimuth})
 
     for a in world.get_actors().filter('walker.*'):
         loc = a.get_location()
@@ -151,6 +154,8 @@ def _adas_ground_truth(world, veiculo):
         dist = math.sqrt(dx**2 + dy**2)
         if dist < RAIO_ADAS and dx * fwd.x + dy * fwd.y > 0:
             pedestres.append(round(dist, 1))
+            azimuth = round(math.degrees(math.atan2(dy, dx)), 1)
+            lidar_objects.append({'class': 'pedestrian', 'distance_m': round(dist, 1), 'azimuth_deg': azimuth})
 
     for a in world.get_actors().filter('traffic.traffic_light*'):
         loc = a.get_location()
@@ -159,31 +164,44 @@ def _adas_ground_truth(world, veiculo):
         if dist < 30.0:
             semaforos.append(round(dist, 1))
 
+    todos = veiculos + pedestres
     return {
-        'adas_veiculo':  len(veiculos)   > 0,
-        'adas_pedestre': len(pedestres)  > 0,
-        'adas_semaforo': len(semaforos)  > 0,
-        'dist_frente_m': min(veiculos)   if veiculos  else None,
-        'n_veiculos':    len(veiculos),
-        'n_pedestres':   len(pedestres),
+        'adas_veiculo':    len(veiculos)  > 0,
+        'adas_pedestre':   len(pedestres) > 0,
+        'adas_semaforo':   len(semaforos) > 0,
+        'dist_frente_m':   min(veiculos)  if veiculos  else None,
+        'dist_pedestre_m': min(pedestres) if pedestres else None,
+        'n_veiculos':      len(veiculos),
+        'n_pedestres':     len(pedestres),
+        'lidar_nearest_m': round(min(todos), 1) if todos else None,
+        'lidar_objects':   lidar_objects,
     }
 
 
 def _ler_telemetria(veiculo, sensores, world):
-    ctrl = veiculo.get_control()
-    vel  = veiculo.get_velocity()
+    ctrl  = veiculo.get_control()
+    vel   = veiculo.get_velocity()
+    rot   = veiculo.get_transform().rotation
     dados = {
         'velocidade_kmh': round(3.6 * math.sqrt(vel.x**2 + vel.y**2 + vel.z**2), 2),
         'throttle':       round(ctrl.throttle, 3),
         'brake':          round(ctrl.brake,    3),
         'steering':       round(ctrl.steer,    3),
         'marcha_re':      ctrl.reverse,
+        'gear':           ctrl.gear,
+        # orientação (para GNSS heading e IMU roll/pitch/yaw)
+        'heading_deg':    round(rot.yaw % 360.0, 1),
+        'roll_deg':       round(rot.roll,  2),
+        'pitch_deg':      round(rot.pitch, 2),
+        'yaw_deg':        round(rot.yaw,   2),
+        # sensores (preenchidos abaixo)
         'latitude':  None, 'longitude': None, 'altitude': None,
         'acel_x': None, 'acel_y': None, 'acel_z': None,
         'giro_x': None, 'giro_y': None, 'giro_z': None,
-        'lidar_pontos': None,
+        'lidar_pontos': None, 'lidar_nearest_m': None, 'lidar_objects': [],
         'adas_veiculo': False, 'adas_pedestre': False, 'adas_semaforo': False,
-        'dist_frente_m': None, 'n_veiculos': 0, 'n_pedestres': 0,
+        'dist_frente_m': None, 'dist_pedestre_m': None,
+        'n_veiculos': 0, 'n_pedestres': 0,
     }
 
     gnss = sensores['gnss'].get('dado')
