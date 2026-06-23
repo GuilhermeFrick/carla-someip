@@ -1,0 +1,2 @@
+# ecu_bridge — sem dependencias externas, usa stdlib Python
+# (socket, json, threading, struct)

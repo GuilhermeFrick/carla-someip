@@ -1,6 +1,3 @@
-from someip_network.network import SomeIPNetwork
-from someip_network.packet import SomeIPPacket
-
 SOMEIP_HOST     = '0.0.0.0'
 SOMEIP_PORT     = 30490          # SOME/IP-SD standard port
 BRIDGE_HOST     = '0.0.0.0'

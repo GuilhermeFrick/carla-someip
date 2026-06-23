@@ -1,9 +1,10 @@
 FROM python:3.10-slim
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
-COPY requirements-docker.txt .
-RUN pip install --no-cache-dir -r requirements-docker.txt
+COPY requirements-bridge.txt .
+RUN pip install --no-cache-dir -r requirements-bridge.txt
 
 COPY someip_network/ ./someip_network/
 COPY attacks/        ./attacks/

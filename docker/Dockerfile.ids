@@ -4,9 +4,10 @@ RUN apt-get update && apt-get install -y tcpdump tshark --no-install-recommends 
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
-COPY requirements-docker.txt .
-RUN pip install --no-cache-dir -r requirements-docker.txt
+COPY requirements-ids.txt .
+RUN pip install --no-cache-dir -r requirements-ids.txt
 
 COPY someip_network/ ./someip_network/
 COPY defense/        ./defense/

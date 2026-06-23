@@ -1,0 +1,2 @@
+# ids_monitor — captura de pacotes em runtime
+scapy==2.5.0
