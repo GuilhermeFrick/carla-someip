@@ -1,0 +1,12 @@
+FROM carlasim/carla:0.9.15
+
+USER root
+WORKDIR /carla-someip
+
+COPY requirements-client.txt .
+RUN pip3 install --quiet -r requirements-client.txt
+
+COPY . .
+
+ENV PYTHONUNBUFFERED=1
+ENV SDL_VIDEODRIVER=dummy
