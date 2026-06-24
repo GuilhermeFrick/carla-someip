@@ -26,7 +26,7 @@ if [ ! -f "CarlaUE4.sh" ]; then
     wget -q --show-progress \
         "https://carla-releases.s3.us-east-005.backblazeb2.com/Linux/CARLA_${CARLA_VERSION}.tar.gz" \
         -O carla.tar.gz
-    tar -xzf carla.tar.gz --strip-components=1
+    tar -xzf carla.tar.gz --strip-components=1 --no-same-owner 2>/dev/null || true
     rm carla.tar.gz
     echo "CARLA extraido em $CARLA_DIR"
 else
