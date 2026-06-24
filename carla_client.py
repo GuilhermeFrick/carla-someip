@@ -328,8 +328,11 @@ def _recriar_atores(world, tm, frequencia, num_npcs):
 # ── Loop principal ────────────────────────────────────────────────────────────
 
 def game_loop(args):
-    pygame.init()
-    pygame.font.init()
+    headless = getattr(args, 'headless', False)
+
+    if not headless:
+        pygame.init()
+        pygame.font.init()
 
     client = carla.Client(args.host, args.port)
     client.set_timeout(60.0)
@@ -340,7 +343,7 @@ def game_loop(args):
     veiculo  = _spawnar_ego(world, tm)
     npcs     = _spawnar_npcs(world, tm, args.npcs)
     sensores = _adicionar_sensores(world, veiculo, args.fps)
-    hud      = HUD()
+    hud      = None if headless else HUD()
 
     bridge_sender.start()
 
@@ -357,6 +360,25 @@ def game_loop(args):
 
     try:
         while tick < total:
+            if headless:
+                if tick >= total:
+                    break
+                world.tick()
+                dados = _ler_telemetria(veiculo, sensores, world)
+                _desenhar_debug_boxes(world, veiculo, args.fps)
+                bridge_sender.enviar(dados)
+                tick += 1
+                if tick % args.fps == 0:
+                    seg  = tick // args.fps
+                    dist = dados.get('dist_frente_m')
+                    logging.info(
+                        't=%03ds | vel=%5.1f km/h | dist=%s | veic=%d | ped=%d',
+                        seg, dados.get('velocidade_kmh', 0),
+                        f'{dist}m' if dist else 'livre',
+                        dados.get('n_veiculos', 0), dados.get('n_pedestres', 0),
+                    )
+                continue
+
             continuar, acao = hud.processar_eventos()
             if not continuar or acao == ACAO_SAIR:
                 break
@@ -384,13 +406,9 @@ def game_loop(args):
                 tick += 1
 
             _desenhar_debug_boxes(world, veiculo, args.fps)
-
-            # publica telemetria na rede SOME/IP via bridge TCP
             bridge_sender.enviar(dados)
             hud.bridge_ok = True
 
-
-            # espectador segue o ego
             t   = veiculo.get_transform()
             fwd = t.get_forward_vector()
             world.get_spectator().set_transform(carla.Transform(
@@ -413,7 +431,8 @@ def game_loop(args):
     except KeyboardInterrupt:
         pass
     finally:
-        hud.fechar()
+        if hud:
+            hud.fechar()
         _limpar(world, veiculo, sensores, npcs)
 
         # restaura modo assincrono
@@ -437,6 +456,8 @@ def main():
                         help='Host do container ecu_bridge (padrao: localhost)')
     parser.add_argument('--bridge-port', default=5000, type=int, dest='bridge_port',
                         help='Porta TCP do ecu_bridge (padrao: 5000)')
+    parser.add_argument('--headless', action='store_true',
+                        help='Sem pygame/HUD — para rodar em servidor Linux sem display')
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
 
