@@ -11,8 +11,12 @@ Referência: AUTOSAR AP AEBServiceInterface / ISO 15623
 """
 
 import argparse
+import os
 import socket
+import sys
 import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from someip_network.packet import SomeIPPacket
 from someip_network import SERVICE_ADAS, METHOD_NOTIFY
