@@ -12,7 +12,8 @@ apt-get update -q
 apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv \
     libjpeg8 libtiff6 libssl-dev \
-    wget curl xvfb
+    wget curl xvfb x11vnc novnc websockify \
+    openbox
 
 # Docker ja disponivel no RunPod via host socket
 docker info > /dev/null 2>&1 && echo "Docker OK" || echo "AVISO: Docker nao disponivel"
@@ -53,39 +54,65 @@ echo "=== [5/6] Docker images ==="
 cd "$REPO_DIR/docker"
 docker compose build ecu_bridge
 
-echo "=== [6/6] Script de execucao ==="
+echo "=== [6/6] Scripts de execucao ==="
+
+# Experimento headless (coleta de dataset)
 cat > /workspace/run_experiment.sh << 'EOF'
 #!/bin/bash
-# Inicia CARLA headless + ecu_bridge + carla_client
-
 CARLA_DIR="/workspace/carla"
 REPO_DIR="/workspace/carla-someip"
-DURATION=${1:-300}   # segundos, default 5 min
+DURATION=${1:-300}
 
 echo "[1] Iniciando CARLA headless..."
 "$CARLA_DIR/CarlaUE4.sh" -RenderOffScreen -quality-level=Epic -nosound &
 CARLA_PID=$!
-echo "CARLA PID=$CARLA_PID — aguardando 20s..."
 sleep 20
 
-echo "[2] Iniciando ecu_bridge..."
+echo "[2] Docker: ecu_bridge + ids_monitor..."
 cd "$REPO_DIR/docker"
 docker compose up -d ecu_bridge
-
-echo "[3] Iniciando ids_monitor..."
 docker compose --profile ids up -d ids_monitor
 
-echo "[4] Rodando simulacao por ${DURATION}s (headless)..."
+echo "[3] Simulacao por ${DURATION}s..."
 source "$CARLA_DIR/venv/bin/activate"
 cd "$REPO_DIR"
 python carla_client.py --headless --duration "$DURATION" --npcs 30
 
-echo "[5] Encerrando..."
+echo "[4] Encerrando..."
 docker compose down
 kill $CARLA_PID 2>/dev/null || true
-echo "Experimento concluido. Logs em $REPO_DIR/data/"
+echo "Concluido. Logs em $REPO_DIR/traffic_logs/"
 EOF
 chmod +x /workspace/run_experiment.sh
+
+# Display visual via VNC (porta 6080 — abrir no RunPod)
+cat > /workspace/start_vnc.sh << 'EOF'
+#!/bin/bash
+CARLA_DIR="/workspace/carla"
+
+echo "[VNC] Iniciando display virtual :1 (1920x1080)..."
+pkill Xvfb x11vnc websockify 2>/dev/null || true
+Xvfb :1 -screen 0 1920x1080x24 &
+sleep 2
+
+echo "[VNC] Iniciando x11vnc..."
+x11vnc -display :1 -nopw -listen localhost -forever -quiet &
+sleep 1
+
+echo "[VNC] Iniciando noVNC na porta 6080..."
+websockify --web=/usr/share/novnc/ 6080 localhost:5900 &
+sleep 1
+
+echo "[VNC] Iniciando CARLA com display..."
+export DISPLAY=:1
+"$CARLA_DIR/CarlaUE4.sh" -quality-level=Epic -nosound &
+echo ""
+echo "======================================="
+echo " Acesse no browser do RunPod:"
+echo " porta 6080 → /vnc.html"
+echo "======================================="
+EOF
+chmod +x /workspace/start_vnc.sh
 
 echo ""
 echo "======================================"
