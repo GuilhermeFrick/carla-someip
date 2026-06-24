@@ -53,6 +53,27 @@ def _configurar_mundo(client, mapa, frequencia):
         client.set_timeout(60.0)
         time.sleep(5.0)
 
+    # Reseta para async primeiro — limpa estado de sessão anterior que possa ter crashado
+    settings = world.get_settings()
+    if settings.synchronous_mode:
+        logging.info('Resetando synchronous_mode de sessao anterior...')
+        settings.synchronous_mode    = False
+        settings.fixed_delta_seconds = None
+        world.apply_settings(settings)
+        time.sleep(1.0)
+
+    # Limpa atores residuais de sessoes anteriores
+    logging.info('Limpando atores residuais...')
+    for a in world.get_actors().filter('vehicle.*'):
+        a.destroy()
+    for a in world.get_actors().filter('sensor.*'):
+        try:
+            a.stop()
+        except Exception:
+            pass
+        a.destroy()
+    time.sleep(1.0)
+
     settings = world.get_settings()
     settings.synchronous_mode    = True
     settings.fixed_delta_seconds = 1.0 / frequencia
@@ -74,9 +95,12 @@ def _spawnar_ego(world, tm, rolename='ego'):
     bp = lib.find('vehicle.tesla.model3')
     bp.set_attribute('role_name', rolename)
     bp.set_attribute('color', '255,0,0')
-    v = world.spawn_actor(bp, pontos[0])
-    v.set_autopilot(True, tm.get_port())
-    return v
+    for ponto in pontos:
+        v = world.try_spawn_actor(bp, ponto)
+        if v:
+            v.set_autopilot(True, tm.get_port())
+            return v
+    raise RuntimeError('Nenhum spawn point disponivel para o ego')
 
 
 def _spawnar_npcs(world, tm, num_npcs):
