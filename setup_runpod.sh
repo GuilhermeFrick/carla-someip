@@ -11,12 +11,11 @@ echo "=== [1/6] Dependencias do sistema ==="
 apt-get update -q
 apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv \
-    libpng16-16 libjpeg-turbo8 libtiff5 \
-    libxerces-c3.2 libssl-dev \
-    docker.io docker-compose-plugin \
-    git wget curl xvfb
+    libjpeg8 libtiff6 libssl-dev \
+    wget curl xvfb
 
-systemctl start docker || true
+# Docker ja disponivel no RunPod via host socket
+docker info > /dev/null 2>&1 && echo "Docker OK" || echo "AVISO: Docker nao disponivel"
 
 echo "=== [2/6] CARLA $CARLA_VERSION ==="
 mkdir -p "$CARLA_DIR"
