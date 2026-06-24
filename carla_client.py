@@ -18,6 +18,10 @@ import random
 import sys
 import time
 
+import socket as _socket
+import struct as _struct
+import threading
+
 import numpy as np
 import carla
 import pygame
@@ -26,8 +30,42 @@ sys.path.append('F:/Mestrado/CARLA/WindowsNoEditor/PythonAPI/carla')
 
 from hud import HUD, ACAO_SAIR, ACAO_REINICIAR, ACAO_MAIS_VEL, ACAO_MENOS_VEL
 from scripts import bridge_sender
+from someip_network.packet import SomeIPPacket
+from someip_network import SERVICE_ADAS
 
 RAIO_ADAS = 50.0   # metros — raio de deteccao ground truth
+
+# Estado AEB recebido via SOME/IP subscriber (atualizado por thread separada)
+_aeb_emergencia = False
+_aeb_lock       = threading.Lock()
+
+
+def _iniciar_aeb_subscriber():
+    """Escuta SOME/IP 0x1005 e atualiza flag de freio de emergência em tempo real."""
+    def _loop():
+        global _aeb_emergencia
+        try:
+            sock = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM, _socket.IPPROTO_UDP)
+            sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+            sock.bind(('', 30490))
+            mreq = _struct.pack('4sL', _socket.inet_aton('239.0.0.1'), _socket.INADDR_ANY)
+            sock.setsockopt(_socket.IPPROTO_IP, _socket.IP_ADD_MEMBERSHIP, mreq)
+            sock.settimeout(1.0)
+            while True:
+                try:
+                    raw, _ = sock.recvfrom(65535)
+                    pkt = SomeIPPacket.decode(raw)
+                    if pkt.service_id == SERVICE_ADAS:
+                        payload = pkt.payload_json()
+                        with _aeb_lock:
+                            _aeb_emergencia = payload.get('emergency_brake_active', False)
+                except _socket.timeout:
+                    pass
+                except Exception:
+                    pass
+        except Exception as e:
+            logging.warning('AEB subscriber indisponivel: %s', e)
+    threading.Thread(target=_loop, daemon=True).start()
 
 
 # ── Mundo / sensores ─────────────────────────────────────────────────────────
@@ -165,6 +203,14 @@ def _adicionar_sensores(world, veiculo, frequencia):
 
     lidar.listen(_on_lidar)
 
+    bp_col = lib.find('sensor.other.collision')
+    col    = world.spawn_actor(bp_col, carla.Transform(), attach_to=veiculo)
+    sensores['colisao'] = {'ator': col, 'dado': None, 'impulso': 0.0}
+    col.listen(lambda e: sensores['colisao'].update({
+        'dado':    e,
+        'impulso': round(e.normal_impulse.length(), 1),
+    }))
+
     return sensores
 
 
@@ -215,6 +261,30 @@ def _adas_ground_truth(world, veiculo):
         'lidar_nearest_m': round(min(todos), 1) if todos else None,
         'lidar_objects':   lidar_objects,
     }
+
+
+def _spawnar_obstaculo(world, veiculo):
+    """Spawna veículo laranja parado 40m à frente — cenário de demonstração de colisão."""
+    lib = world.get_blueprint_library()
+    bps = [b for b in lib.filter('vehicle.*')
+           if int(b.get_attribute('number_of_wheels')) == 4]
+    bp  = random.choice(bps)
+    if bp.has_attribute('color'):
+        bp.set_attribute('color', '255,140,0')
+    t   = veiculo.get_transform()
+    fwd = t.get_forward_vector()
+    loc = carla.Location(
+        x=t.location.x + fwd.x * 40.0,
+        y=t.location.y + fwd.y * 40.0,
+        z=t.location.z + 0.1,
+    )
+    obs = world.try_spawn_actor(bp, carla.Transform(loc, t.rotation))
+    if obs:
+        obs.set_autopilot(False)
+        logging.info('Obstaculo spawnado 40m a frente do ego')
+    else:
+        logging.warning('Nao foi possivel spawnar obstaculo — ponto ocupado')
+    return obs
 
 
 def _desenhar_debug_boxes(world, veiculo, fps):
@@ -319,7 +389,15 @@ def _ler_telemetria(veiculo, sensores, world):
         dados['lidar_pontos'] = len(lidar)
         dados['lidar_pts_xyz'] = sensores['lidar'].get('pts_xyz')
 
+    col = sensores.get('colisao', {})
+    dados['colisao_impulso'] = col.get('impulso', 0.0)
+    col['impulso'] = 0.0  # reset após leitura
+
     dados.update(_adas_ground_truth(world, veiculo))
+
+    with _aeb_lock:
+        dados['aeb_override'] = _aeb_emergencia
+
     return dados
 
 
@@ -334,6 +412,19 @@ def _limpar(world, veiculo, sensores, npcs):
             npc.destroy()
         except Exception:
             pass
+
+
+def _aplicar_aeb(veiculo, dados, cenario_crash):
+    """Aplica controle de freio baseado no estado AEB recebido via SOME/IP."""
+    with _aeb_lock:
+        aeb_on = _aeb_emergencia
+    if aeb_on:
+        veiculo.apply_control(carla.VehicleControl(brake=1.0, throttle=0.0))
+    elif cenario_crash:
+        # Mantém velocidade constante rumo ao obstáculo (sem autopilot)
+        vel = dados.get('velocidade_kmh', 0) or 0
+        if vel < 60:
+            veiculo.apply_control(carla.VehicleControl(throttle=0.5, steer=0.0, brake=0.0))
 
 
 def _recriar_atores(world, tm, frequencia, num_npcs):
@@ -370,6 +461,20 @@ def game_loop(args):
     hud      = None if headless else HUD()
 
     bridge_sender.start()
+    _iniciar_aeb_subscriber()
+    logging.info('AEB subscriber ativo — escuta SOME/IP 0x1005')
+
+    cenario_crash = getattr(args, 'scenario', 'none') == 'crash'
+    obstaculo     = None
+
+    if cenario_crash:
+        veiculo.set_autopilot(False)
+        obstaculo = _spawnar_obstaculo(world, veiculo)
+        if obstaculo:
+            npcs.append(obstaculo)
+        logging.info('=== CENARIO CRASH ===')
+        logging.info('Normal : AEB freia antes do impacto')
+        logging.info('Ataque : python attacks/spoof.py --mode suppress --duration 60')
 
     velocidade_sim = 1
     dados = {}
@@ -389,6 +494,7 @@ def game_loop(args):
                     break
                 world.tick()
                 dados = _ler_telemetria(veiculo, sensores, world)
+                _aplicar_aeb(veiculo, dados, cenario_crash)
                 _desenhar_debug_boxes(world, veiculo, args.fps)
                 bridge_sender.enviar(dados)
                 tick += 1
@@ -427,6 +533,7 @@ def game_loop(args):
                     break
                 world.tick()
                 dados = _ler_telemetria(veiculo, sensores, world)
+                _aplicar_aeb(veiculo, dados, cenario_crash)
                 tick += 1
 
             _desenhar_debug_boxes(world, veiculo, args.fps)
@@ -482,6 +589,8 @@ def main():
                         help='Porta TCP do ecu_bridge (padrao: 5000)')
     parser.add_argument('--headless', action='store_true',
                         help='Sem pygame/HUD — para rodar em servidor Linux sem display')
+    parser.add_argument('--scenario', default='none', choices=['none', 'crash'],
+                        help='none=simulacao normal | crash=demonstracao de colisao com AEB')
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
 

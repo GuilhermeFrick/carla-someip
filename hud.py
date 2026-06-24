@@ -420,8 +420,29 @@ class HUD:
             self._overlay_pause()
 
         self._painel_lidar(dados)
+        self._overlay_aeb(dados)
         pygame.display.flip()
         self.clock.tick(frequencia)
+
+    def _overlay_aeb(self, dados):
+        impulso  = dados.get('colisao_impulso', 0) or 0
+        aeb_on   = dados.get('aeb_override', False)
+
+        if impulso > 0:
+            ov = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
+            ov.fill((200, 0, 0, 120))
+            self.tela.blit(ov, (0, 0))
+            t1 = self.fonte_grande.render('COLISÃO!', True, BRANCO)
+            t2 = self.fonte_media.render(f'impulso: {impulso:.0f} N', True, AMARELO)
+            self.tela.blit(t1, (LARGURA // 2 - t1.get_width() // 2, ALTURA // 2 - 50))
+            self.tela.blit(t2, (LARGURA // 2 - t2.get_width() // 2, ALTURA // 2 + 20))
+
+        elif aeb_on:
+            t = self.fonte_media.render('AEB  FREIO EMERGÊNCIA', True, VERMELHO)
+            pygame.draw.rect(self.tela, VERMELHO,
+                             (LARGURA // 2 - t.get_width() // 2 - 8, ALTURA // 2 - 20,
+                              t.get_width() + 16, 36), border_radius=6)
+            self.tela.blit(t, (LARGURA // 2 - t.get_width() // 2, ALTURA // 2 - 16))
 
     def fechar(self):
         pygame.quit()
