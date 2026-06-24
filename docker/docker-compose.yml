@@ -9,7 +9,7 @@ services:
 
   # ── CARLA Simulator ────────────────────────────────────────────────────────
   carla_server:
-    image: carlasim/carla:0.9.15
+    image: carlasim/carla:0.9.16
     runtime: nvidia
     network_mode: host
     environment:
