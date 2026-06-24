@@ -16,6 +16,8 @@ services:
       dockerfile: docker/Dockerfile.ecu
     container_name: ecu_bridge
     command: python -m someip_network.bridge
+    environment:
+      - PYTHONUNBUFFERED=1
     ports:
       - "5000:5000"        # TCP bridge — CARLA conecta aqui
     networks:
@@ -23,12 +25,15 @@ services:
         ipv4_address: 172.20.0.10
     restart: on-failure
 
-  # Monitor IDS — captura PCAP e roda deteccao
+  # Monitor IDS — ativado manualmente com: docker compose --profile ids up
   ids_monitor:
     build:
       context: ..
       dockerfile: docker/Dockerfile.ids
     container_name: ids_monitor
+    profiles: ["ids"]
+    environment:
+      - PYTHONUNBUFFERED=1
     volumes:
       - ../traffic_logs:/app/traffic_logs
     networks:

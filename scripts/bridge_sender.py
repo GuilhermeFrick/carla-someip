@@ -8,12 +8,13 @@ import socket
 import threading
 import queue
 import time
+from typing import Optional
 
 BRIDGE_HOST = 'localhost'   # IP do container — ajustar se necessario
 BRIDGE_PORT = 5000
 
 _queue: queue.Queue = queue.Queue(maxsize=500)
-_conn:  socket.socket | None = None
+_conn:  Optional[socket.socket] = None
 _lock   = threading.Lock()
 
 
